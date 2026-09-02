@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>MGC Sales Assistant</title></head>
+<body>
+<h1>MGC Sales Assistant</h1>
+
+<h2>Document Assistant</h2>
+<form method="post">
+  <input type="hidden" name="action" value="ask">
+  <input name="question" size="90" placeholder="Ask about price, transfer fee, rental yield..." required>
+  <button>Ask</button>
+</form>
+{% if answer %}
+<h3>Answer</h3><p style="white-space:pre-wrap">{{ answer }}</p>
+<h3>Sources</h3>
+<ul>{% for s in sources %}<li>{{s.document}} — {{s.sections|join(", ")}}</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Lead Scoring</h2>
+<form method="post">
+<input type="hidden" name="action" value="score">
+Source: <input name="source" value="Facebook Ads"><br>
+City: <input name="city" value="Islamabad"><br>
+Area: <input name="area"><br>
+Property type: <input name="property_type" value="Apartment"><br>
+Budget (PKR lac): <input name="budget_pkr_lac" type="number" step="0.1"><br>
+Bedrooms: <input name="bedrooms" type="number" min="1" max="10"><br>
+Overseas: <select name="is_overseas"><option value="0">No</option><option value="1">Yes</option></select><br>
+Referred by existing client: <select name="referred_by_existing_client"><option value="0">No</option><option value="1">Yes</option></select><br>
+Financing approved: <select name="has_financing_approved"><option value="0">No</option><option value="1">Yes</option></select><br>
+<button>Score Lead</button>
+</form>
+{% if score is not none %}<h3>Predicted conversion likelihood: {{ "%.1f"|format(score*100) }}%</h3>{% endif %}
+</body>
+</html>
