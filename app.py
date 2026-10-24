@@ -82,7 +82,7 @@ def home():
             else:
                 try:
                     row = parse_lead_form(request.form)
-                    score = float(model.predict_proba(pd.DataFrame([row]))[:, 1][0])
+                    score = float(model.predict_proba(pd.DataFrame([row]))[0][1])
                 except ValueError as exc:
                     error = str(exc)
                     status = 400
@@ -98,4 +98,5 @@ def home():
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=False)
+
 
