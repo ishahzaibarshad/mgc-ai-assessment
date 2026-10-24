@@ -3,6 +3,7 @@
 <head><meta charset="utf-8"><title>MGC Sales Assistant</title></head>
 <body>
 <h1>MGC Sales Assistant</h1>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
 
 <h2>Document Assistant</h2>
 <form method="post">
@@ -33,3 +34,4 @@ Financing approved: <select name="has_financing_approved"><option value="0">No</
 {% if score is not none %}<h3>Predicted conversion likelihood: {{ "%.1f"|format(score*100) }}%</h3>{% endif %}
 </body>
 </html>
+

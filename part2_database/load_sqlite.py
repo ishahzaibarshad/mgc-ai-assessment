@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from pathlib import Path
 
@@ -29,41 +30,69 @@ def normalize_city(value):
     return mapping.get(value, str(value).title())
 
 
-def main():
-    df = pd.read_csv(CSV_PATH)
+def prepare_data(csv_path=CSV_PATH):
+    """Load, normalize, and deduplicate a CRM export without mutating the input file."""
+    df = pd.read_csv(csv_path)
+    required = {"city", "crm_record_hash"}
+    missing = required.difference(df.columns)
+    if missing:
+        raise ValueError(f"CRM export is missing required columns: {', '.join(sorted(missing))}")
+
     df["city"] = df["city"].apply(normalize_city)
-
-    # Keep the first occurrence of each CRM identity in the clean operational table.
-    # The raw table is retained so duplicate records remain auditable.
-    duplicate_rows = int(df.duplicated("crm_record_hash", keep=False).sum())
-    duplicate_groups = int(df.loc[df.duplicated("crm_record_hash", keep=False), "crm_record_hash"].nunique())
+    duplicate_mask = df.duplicated("crm_record_hash", keep=False)
+    duplicate_rows = int(duplicate_mask.sum())
+    duplicate_groups = int(df.loc[duplicate_mask, "crm_record_hash"].nunique())
     clean_df = df.drop_duplicates("crm_record_hash", keep="first").copy()
+    summary = {
+        "raw_rows": len(df),
+        "duplicate_groups": duplicate_groups,
+        "duplicate_rows": duplicate_rows,
+        "clean_rows": len(clean_df),
+    }
+    return df, clean_df, summary
 
-    if DB_PATH.exists():
-        DB_PATH.unlink()
 
-    conn = sqlite3.connect(DB_PATH)
+def write_database(raw_df, clean_df, db_path=DB_PATH):
+    """Build a replacement database beside the current one, then atomically swap it in."""
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = db_path.with_name(f".{db_path.name}.tmp")
+    temporary_path.unlink(missing_ok=True)
+    conn = None
     try:
+        conn = sqlite3.connect(temporary_path)
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("DROP TABLE IF EXISTS crm_import_raw")
-        conn.execute("DROP TABLE IF EXISTS leads")
-
-        # Raw staging table: preserves the CRM dump exactly enough for duplicate auditing.
-        df.to_sql("crm_import_raw", conn, if_exists="replace", index=False)
-
-        # Clean operational table: use the submitted schema so PRIMARY KEY / UNIQUE
-        # constraints are actually enforced rather than merely documented.
+        raw_df.to_sql("crm_import_raw", conn, if_exists="replace", index=False)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
 
         columns = [row[1] for row in conn.execute("PRAGMA table_info(leads)").fetchall()]
+        missing = set(columns).difference(clean_df.columns)
+        if missing:
+            raise ValueError(f"CRM export is missing schema columns: {', '.join(sorted(missing))}")
         clean_df[columns].to_sql("leads", conn, if_exists="append", index=False)
         conn.commit()
+        conn.close()
+        conn = None
+        os.replace(temporary_path, db_path)
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+            conn.close()
+        temporary_path.unlink(missing_ok=True)
+        raise
 
-        print(f"Raw CRM rows: {len(df)}")
-        print(f"Duplicate hash groups: {duplicate_groups}")
-        print(f"Rows affected by duplicate hashes: {duplicate_rows}")
-        print(f"Clean leads loaded: {len(clean_df)}")
 
+def main():
+    raw_df, clean_df, summary = prepare_data()
+    write_database(raw_df, clean_df)
+
+    print(f"Raw CRM rows: {summary['raw_rows']}")
+    print(f"Duplicate hash groups: {summary['duplicate_groups']}")
+    print(f"Rows affected by duplicate hashes: {summary['duplicate_rows']}")
+    print(f"Clean leads loaded: {summary['clean_rows']}")
+    print("Duplicate identifiers are omitted from console output.")
+
+    with sqlite3.connect(DB_PATH) as conn:
         print("\nConversion rates on clean leads:")
         conversion_sql = """
         SELECT
@@ -81,24 +110,7 @@ def main():
         """
         print(pd.read_sql_query(conversion_sql, conn).to_string(index=False))
 
-        print("\nDuplicate CRM hashes in raw import:")
-        duplicate_sql = """
-        SELECT
-            crm_record_hash,
-            COUNT(*) AS duplicate_rows,
-            MIN(created_at) AS first_created_at,
-            MAX(created_at) AS last_created_at,
-            GROUP_CONCAT(lead_id, ', ') AS lead_ids
-        FROM crm_import_raw
-        GROUP BY crm_record_hash
-        HAVING COUNT(*) > 1
-        ORDER BY duplicate_rows DESC, crm_record_hash
-        LIMIT 10;
-        """
-        print(pd.read_sql_query(duplicate_sql, conn).to_string(index=False))
-    finally:
-        conn.close()
-
 
 if __name__ == "__main__":
     main()
+
