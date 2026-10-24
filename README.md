@@ -23,6 +23,8 @@ mgc-ai-assessment/
 │   └── index.html
 ├── app.py
 ├── requirements.txt
+├── requirements-dev.txt
+├── tests/
 └── README.md
 ```
 
@@ -184,3 +186,15 @@ A single Flask page ties both useful pieces together. It is intentionally bare b
 ## Assessment compliance
 
 The brief says AI tools are allowed, but every submitted line must be explainable. This project therefore favors small modules, deterministic rules for the high-risk cases, and a simple baseline model over unnecessary infrastructure.
+
+## Tests
+
+Install the development requirements and run the automated checks:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+The tests cover document retrieval edge cases, safe database replacement, the leakage-conscious training pipeline, and form validation/error responses. A GitHub Actions workflow runs this suite on pushes and pull requests.
+

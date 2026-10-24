@@ -1,4 +1,6 @@
 .venv/
+.venv-*/
+worktmp/
 __pycache__/
 *.py[cod]
 *.db
@@ -7,3 +9,4 @@ __pycache__/
 *.joblib
 .DS_Store
 Thumbs.db
+

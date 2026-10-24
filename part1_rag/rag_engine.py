@@ -10,7 +10,12 @@ class DocumentStore:
         self.chunks = []
         self._load()
         self.vectorizer = TfidfVectorizer(lowercase=True, ngram_range=(1,2), stop_words="english")
-        self.matrix = self.vectorizer.fit_transform([c["text"] for c in self.chunks])
+        self.matrix = None
+        if self.chunks:
+            try:
+                self.matrix = self.vectorizer.fit_transform([c["text"] for c in self.chunks])
+            except ValueError as exc:
+                raise ValueError("The Markdown documents contain no searchable terms.") from exc
 
     def _load(self):
         for path in sorted(self.docs_dir.glob("*.md")):
@@ -23,6 +28,8 @@ class DocumentStore:
                     self.chunks.append({"source": path.name, "section": title, "text": section})
 
     def retrieve(self, query, k=5):
+        if not self.chunks:
+            return []
         q = self.vectorizer.transform([query])
         scores = cosine_similarity(q, self.matrix)[0]
         idx = scores.argsort()[::-1][:k]
@@ -127,3 +134,4 @@ class GroundedAssistant:
                 sections=[c["section"] for c in self.store.chunks if c["source"]==n]
                 out.append({"document":n,"sections":sections})
         return out
+
